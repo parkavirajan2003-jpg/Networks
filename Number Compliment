@@ -1,0 +1,7 @@
+int findComplement(int num) {
+    unsigned int value = 1;
+    while (value < num) {
+        value = (value << 1) | 1;
+    }
+    return num ^ value;
+}
