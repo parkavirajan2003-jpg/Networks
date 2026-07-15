@@ -1,0 +1,42 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+int compare(const void* a, const void* b) {
+    return (*(int*)a - *(int*)b);
+}
+bool binarySearch(int* arr, int size, int target) {
+    int left = 0, right = size - 1;
+    while (left <= right) {
+        int mid = left + (right - left) / 2;
+        if (arr[mid] == target) return true;
+        if (arr[mid] < target) left = mid + 1;
+        else right = mid - 1;
+    }
+    return false;
+}
+int findMaximumXOR(int* nums, int numsSize) {
+    int maxResult = 0;
+    int mask = 0;
+    int* prefixes = (int*)malloc(numsSize * sizeof(int));
+    for (int i = 30; i >= 0; i--) {
+        mask = mask | (1 << i);
+        int greedyTry = maxResult | (1 << i);
+        for (int j = 0; j < numsSize; j++) {
+            prefixes[j] = nums[j] & mask;
+        }
+        qsort(prefixes, numsSize, sizeof(int), compare);
+        bool foundPair = false;
+        for (int j = 0; j < numsSize; j++) {
+            int targetPrefixB = prefixes[j] ^ greedyTry;        
+            if (binarySearch(prefixes, numsSize, targetPrefixB)) {
+                foundPair = true;
+                break;
+            }
+        }
+        if (foundPair) {
+            maxResult = greedyTry;
+        }
+    }
+    free(prefixes); // Clean up memory
+    return maxResult;
+}
