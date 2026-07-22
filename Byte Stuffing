@@ -1,0 +1,150 @@
+#include<stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+// Helper function to print a character string separated by spaces for visibility
+void printBytes(char *str) {
+    int i;
+    for (i = 0; str[i] != '\0'; i++) {
+        // Print non-printable control characters safely or print normal characters
+        if (str[i] == 1) printf("[STX]");
+        else if (str[i] == 2) printf("[ETX]");
+        else if (str[i] == 3) printf("[DLE]");
+        else printf("%c", str[i]);
+
+        if (str[i + 1] != '\0') {
+            printf(" ");
+        }
+    }
+    printf("\n");
+}
+
+int main() {
+    char inputString[100];
+    char originalData[100] = {0};
+    char stuffedData[300] = {0};
+    char transmittedFrame[400] = {0};
+    char receivedFrame[400] = {0};
+    char extractedPayload[300] = {0};
+    char destuffedData[100] = {0};
+    char recoveredString[100] = {0};
+    int i;
+
+    // We define custom non-printable characters for flags to prevent collisions
+    // DLE = 3 (Data Link Escape), STX = 1 (Start of Text), ETX = 2 (End of Text)
+    char DLE = 3;
+    char STX = 1;
+    char ETX = 2;
+
+    printf("Enter input string: ");
+    scanf("%s", inputString);
+
+    // 1. Text assignment (Replaces text-to-binary)
+    strcpy(originalData, inputString);
+
+    // 2. Byte Stuffing Algorithm (Insert DLE before any DLE found in data)
+    int j = 0;
+    for (i = 0; originalData[i] != '\0'; i++) {
+        if (originalData[i] == DLE) {
+            stuffedData[j++] = DLE; // Stuff extra DLE character
+        }
+        stuffedData[j++] = originalData[i];
+    }
+    stuffedData[j] = '\0';
+
+    // 3. Encapsulate inside standard Framing Flags (DLE STX at start, DLE ETX at end)
+    int frameIndex = 0;
+    transmittedFrame[frameIndex++] = DLE;
+    transmittedFrame[frameIndex++] = STX;
+    for(i = 0; stuffedData[i] != '\0'; i++) {
+        transmittedFrame[frameIndex++] = stuffedData[i];
+    }
+    transmittedFrame[frameIndex++] = DLE;
+    transmittedFrame[frameIndex++] = ETX;
+    transmittedFrame[frameIndex] = '\0';
+
+    // Display Sender Outputs
+    printf("\n=========== SENDER SIDE ===========\n");
+    printf("Original Data (String) : %s\n", inputString);
+    printf("Original Data (Bytes)  : "); printBytes(originalData);
+    printf("Stuffed Frame          : "); printBytes(transmittedFrame);
+    printf("Transmitted Frame      : "); printBytes(transmittedFrame);
+
+    // 4. Error Injection Module
+    strcpy(receivedFrame, transmittedFrame);
+    int choice;
+    printf("\n=========== ERROR SIMULATION ===========\n");
+    printf("0. No Error\n1. Single-byte Error\n2. Multiple-byte Error\nEnter Choice: ");
+    scanf("%d", &choice);
+
+    int frameLen = strlen(receivedFrame);
+    if (choice == 1) {
+        int pos;
+        printf("Enter byte position to corrupt (0 to %d): ", frameLen - 1);
+        scanf("%d", &pos);
+        if (pos >= 0 && pos < frameLen) {
+            receivedFrame[pos] = receivedFrame[pos] + 1; // Corrupt character value
+            printf("Single-byte error injected successfully.\n");
+        }
+    } else if (choice == 2) {
+        int numErrors, pos;
+        printf("How many bytes do you want to corrupt? ");
+        scanf("%d", &numErrors);
+        for (i = 0; i < numErrors; i++) {
+            printf("Enter byte position %d: ", i + 1);
+            scanf("%d", &pos);
+            if (pos >= 0 && pos < frameLen) {
+                receivedFrame[pos] = receivedFrame[pos] + 1;
+            }
+        }
+        printf("%d-byte errors injected successfully.\n", numErrors);
+    } else {
+        printf("No errors introduced.\n");
+    }
+
+    // 5. Receiver Side Module
+    printf("\n=========== RECEIVER SIDE ===========\n");
+    printf("Received Frame      : "); printBytes(receivedFrame);
+
+    // Boundary and flag confirmation check (Starts with DLE STX and ends with DLE ETX)
+    if (frameLen >= 4 && receivedFrame[0] == DLE && receivedFrame[1] == STX && receivedFrame[frameLen - 2] == DLE && receivedFrame[frameLen - 1] == ETX) {
+
+        // Extract intermediate payload
+        strncpy(extractedPayload, &receivedFrame[2], frameLen - 4);
+        extractedPayload[frameLen - 4] = '\0';
+
+        // 6. De-stuffing Logic & Structural Error Checking
+        int k = 0;
+        int destuffError = 0;
+        int payloadLen = strlen(extractedPayload);
+
+        for (i = 0; i < payloadLen; i++) {
+            if (extractedPayload[i] == DLE) {
+                // If DLE is found, next character must also be DLE in error-free data
+                if (i + 1 < payloadLen && extractedPayload[i + 1] == DLE) {
+                    destuffedData[k++] = DLE;
+                    i++; // Skip the stuffed DLE byte element
+                } else {
+                    destuffError = 1; // Framing rule violation detected (Unescaped single DLE)
+                }
+            } else {
+                destuffedData[k++] = extractedPayload[i];
+            }
+        }
+        destuffedData[k] = '\0';
+
+        // 7. Error Detection Status Report
+        if (destuffError || strcmp(destuffedData, originalData) != 0) {
+            printf("\nERROR DETECTION STATUS: Error detected! Data contains structural errors so data discarded.\n");
+        } else {
+            printf("De-stuffed Data     : "); printBytes(destuffedData);
+            strcpy(recoveredString, destuffedData);
+            printf("Recovered Original  : %s\n", recoveredString);
+            printf("\nERROR DETECTION STATUS: Data received correctly without errors.\n");
+        }
+    } else {
+        printf("\nERROR DETECTION STATUS: Framing Error! Flag delimiters are corrupted so data discarded.\n");
+    }
+
+    return 0;
+}
